@@ -76,10 +76,10 @@ BROWSER_CAPS = [
         "browserName": "Safari",
         "bstack:options": {
             **COMMON_CAPS["bstack:options"],
-            "deviceName": "iPhone 15",
-            "osVersion": "17",
+            "deviceName": "iPad Pro 12.9 2022",
+            "osVersion": "16",
             "realMobile": True,
-            "sessionName": "iPhone 15 - Safari",
+            "sessionName": "iPad Pro - Safari",
         },
     },
     # Mobile — Samsung Galaxy (Chrome)

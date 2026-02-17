@@ -41,11 +41,13 @@ def create_local_driver(*, headless: bool = True):
 
 def create_browserstack_driver(capabilities: dict):
     """Return a Remote WebDriver pointing at BrowserStack with *capabilities*."""
+    options = _caps_to_options(capabilities)
+    options.page_load_strategy = "eager"  # don't wait for full page load
     driver = webdriver.Remote(
         command_executor=BROWSERSTACK_URL,
-        options=_caps_to_options(capabilities),
+        options=options,
     )
-    driver.implicitly_wait(10)
+    driver.implicitly_wait(3)
     return driver
 
 

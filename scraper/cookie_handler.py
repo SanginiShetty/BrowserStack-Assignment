@@ -8,13 +8,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 
-def accept_cookies(driver, timeout: int = 8):
+def accept_cookies(driver, timeout: int = 5):
     """Click the 'Accept' button on the Didomi cookie banner, if present."""
     try:
         accept_btn = WebDriverWait(driver, timeout).until(
             EC.element_to_be_clickable((By.ID, "didomi-notice-agree-button"))
         )
         accept_btn.click()
-        time.sleep(1)
     except Exception:
         pass  # Banner may not appear or was already dismissed

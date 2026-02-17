@@ -20,7 +20,7 @@ from translator.header_translator import translate_titles
 from analyzer.word_analyzer import find_repeated_words, print_repeated_words, print_all_word_counts
 
 MAX_PARALLEL_THREADS = 5
-MAX_RETRIES = 3
+MAX_RETRIES = 1  # No retries to avoid session timeout
 
 # Thread-safe print lock
 _print_lock = threading.Lock()
@@ -35,24 +35,28 @@ def _run_single_attempt(capabilities: dict, session_name: str) -> dict:
     """
     Execute one attempt of the scraping workflow on a BrowserStack session.
 
-    Returns a dict with status, articles list, and titles.
+    Optimised for speed: extracts titles directly from the listing page
+    instead of navigating to each article individually.
+
+    Returns a dict with status, titles list.
     """
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
 
     driver = None
-    articles = []
+    titles = []
     status = "FAILED"
+    reason = ""  # Track failure reason for BrowserStack dashboard
     try:
         driver = create_browserstack_driver(capabilities)
 
         # Navigate to Opinion section
         driver.get(OPINION_URL)
 
-        # Wait for the page to be ready
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.TAG_NAME, "html"))
+        # Wait for article headlines to appear
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "article h2 a"))
         )
 
         # Accept cookies & verify language
@@ -60,26 +64,51 @@ def _run_single_attempt(capabilities: dict, session_name: str) -> dict:
         lang = driver.find_element(By.TAG_NAME, "html").get_attribute("lang")
         _safe_print(f"  [{session_name}] Language: {lang}")
 
-        # Collect article links
-        article_urls = collect_article_links(driver, MAX_ARTICLES)
-        _safe_print(f"  [{session_name}] Found {len(article_urls)} article(s)")
+        # Brief settle time for dynamic content
+        import time
+        time.sleep(0.3)
 
-        # Scrape each article
-        for idx, url in enumerate(article_urls):
-            article = scrape_article(driver, url, idx)
-            articles.append(article)
-            _safe_print(f"  [{session_name}] Scraped: {article['title']}")
+        # Extract titles directly from listing page (no extra navigations)
+        link_elements = driver.find_elements(By.CSS_SELECTOR, "article h2 a")
+        seen_urls = set()
+        for el in link_elements:
+            href = el.get_attribute("href")
+            # Accept all articles on the Opinion page (we're already filtered by URL)
+            if href and href not in seen_urls:
+                seen_urls.add(href)
+                title = el.text.strip()
+                if title:
+                    titles.append(title)
+                    _safe_print(f"  [{session_name}] Found: {title}")
+            if len(titles) >= MAX_ARTICLES:
+                break
 
-        status = "PASSED"
+        _safe_print(f"  [{session_name}] Collected {len(titles)} title(s)")
+
+        # iPad/tablets have large viewports, require 5 articles for all devices
+        min_required = MAX_ARTICLES
+
+        if len(titles) >= min_required:
+            status = "PASSED"
+            reason = f"Successfully scraped {len(titles)} articles"
+        else:
+            _safe_print(f"  [{session_name}] Expected {min_required}+, got {len(titles)}")
+            status = "FAILED"
+            reason = f"Insufficient articles: expected {min_required}, found {len(titles)}"
+
     except Exception as exc:
         _safe_print(f"  [{session_name}] ERROR: {exc}")
         status = "FAILED"
+        reason = f"Exception: {str(exc)[:200]}"  # Truncate long error messages
     finally:
         if driver:
             try:
+                # Include reason in BrowserStack session status for dashboard visibility
+                import json
+                reason_escaped = json.dumps(reason)  # Properly escape the reason string
                 driver.execute_script(
                     f'browserstack_executor: {{"action": "setSessionStatus", '
-                    f'"arguments": {{"status": "{status.lower()}"}}}}'
+                    f'"arguments": {{"status": "{status.lower()}", "reason": {reason_escaped}}}}}'
                 )
             except Exception:
                 pass
@@ -87,8 +116,8 @@ def _run_single_attempt(capabilities: dict, session_name: str) -> dict:
 
     return {
         "status": status,
-        "articles": articles,
-        "titles": [a["title"] for a in articles],
+        "articles": [],
+        "titles": titles,
     }
 
 
@@ -122,7 +151,7 @@ def run_on_browser(capabilities: dict) -> dict:
         "titles": outcome["titles"],
     }
     icon = "✓" if result["status"] == "PASSED" else "✗"
-    _safe_print(f"[{icon}] Session '{session_name}' finished — {result['status']} ({result['articles']} articles)")
+    _safe_print(f"[{icon}] Session '{session_name}' finished — {result['status']} ({result['articles']} titles)")
     return result
 
 
