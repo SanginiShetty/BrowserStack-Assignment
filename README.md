@@ -4,6 +4,12 @@ Selenium-based scraper that fetches articles from the **Opinion** section of [El
 
 ---
 
+## Demo Video
+
+[Watch the demo video on Google Drive](https://drive.google.com/file/d/1ODG3wIfkSsHK7W07D-ptQZyzfaoS-9kV/view?usp=sharing)
+
+---
+
 ## Project Structure
 
 ```
